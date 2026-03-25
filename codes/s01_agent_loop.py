@@ -35,7 +35,7 @@ load_dotenv(override=True)
 
 # 使用 OpenAI SDK 初始化 DeepSeek Client
 client = OpenAI(
-    api_key="sk-e8c2dbe4528d49d6a32027bd8f213a16",
+    api_key="",
     base_url="https://api.deepseek.com"
 )
 
