@@ -1,0 +1,11 @@
+.DS_Store
+__pycache__/
+*.py[cod]
+
+.idea/
+codes/.env
+codes/config.yaml
+
+.task_outputs/
+.transcripts/
+

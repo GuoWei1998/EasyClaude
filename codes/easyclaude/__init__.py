@@ -1,0 +1,2 @@
+"""EasyClaude teaching agent modules."""
+

@@ -1,0 +1,21 @@
+{
+  "hooks": {
+    "SessionStart": [
+      {
+        "command": "echo 'Hook system started'"
+      }
+    ],
+    "PreToolUse": [
+      {
+        "matcher": "bash",
+        "command": "echo 'About to run bash command'"
+      }
+    ],
+    "PostToolUse": [
+      {
+        "matcher": "bash",
+        "command": "echo 'Bash command finished'"
+      }
+    ]
+  }
+}

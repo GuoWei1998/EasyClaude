@@ -1,0 +1,47 @@
+# EasyClaude
+
+EasyClaude is a teaching project for building a small coding agent step by step.
+
+## Project Layout
+
+```text
+codes/
+  main.py                 # CLI entry point
+  easyclaude/             # Agent implementation modules
+    agent.py              # Agent loop, subagents, tool execution
+    tools.py              # Tool schemas and tool implementations
+    todo.py               # Todo/session planning
+    skills.py             # Skill registry and load_skill support
+    compact.py            # Context compaction and large-output persistence
+    permissions.py        # Permission modes, rules, bash validation
+    hooks.py              # Hook loading and execution
+    messages.py           # Message normalization helpers
+    config.py             # Environment, client, workspace paths
+skills/                   # Project-level skill documents
+examples/                 # Teaching scaffolds and reference experiments
+.hooks.json               # Workspace hook configuration
+.claude/.claude_trusted   # Trust marker that enables hooks
+```
+
+## Run
+
+```bash
+python3 codes/main.py
+```
+
+Useful REPL commands:
+
+```text
+/mode default
+/mode plan
+/mode auto
+/rules
+/hooks
+q
+```
+
+## Notes
+
+Runtime artifacts are written to `.task_outputs/` and `.transcripts/`.
+Local secrets should stay in `codes/.env`.
+
