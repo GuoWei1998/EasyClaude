@@ -4,7 +4,6 @@ from pathlib import Path
 
 from .config import WORKDIR
 
-
 CONCURRENCY_SAFE = {"read_file"}
 CONCURRENCY_UNSAFE = {"write_file", "edit_file"}
 
@@ -180,6 +179,22 @@ TOOLS = [
             },
         },
     },
+    {
+        "name": "save_memory", 
+        "description": "Save a persistent memory that survives across sessions.",
+        "input_schema": {
+                "type": "object", 
+                "properties":{
+                    "name": {"type": "string", "description": "Short identifier (e.g. prefer_tabs, db_schema)"},
+                    "description": {"type": "string", "description": "One-line summary of what this memory captures"},
+                    "type": {"type": "string", "enum": ["user", "feedback", "project", "reference"],
+                            "description": "user=preferences, feedback=corrections, project=non-obvious project conventions or decision reasons, reference=external resource pointers"},
+                    "content": {"type": "string", "description": "Full memory content (multi-line OK)"},
+                }, 
+                "required": ["name", "description", "type", "content"]
+        }
+    },
+
 ]
 
 
@@ -189,7 +204,7 @@ CHILD_TOOLS = [
 ]
 
 
-def build_tool_handlers(todo, skill_registry):
+def build_tool_handlers(todo, skill_registry, memory_manager):
     return {
         "bash": lambda **kw: run_bash(kw["command"]),
         "read_file": lambda **kw: run_read(kw["path"], kw.get("limit")),
@@ -198,5 +213,7 @@ def build_tool_handlers(todo, skill_registry):
         "todo": lambda **kw: todo.update(kw["items"]),
         "load_skill": lambda **kw: skill_registry.load_full_text(kw["name"]),
         "compact": lambda **kw: run_compact(),
+        "save_memory": lambda **kw: memory_manager.save_memory(
+            kw["name"], kw["description"], kw["type"], kw["content"]
+        ),
     }
-

@@ -15,6 +15,7 @@ codes/
     compact.py            # Context compaction and large-output persistence
     permissions.py        # Permission modes, rules, bash validation
     hooks.py              # Hook loading and execution
+    memory.py             # Persistent memory across sessions
     messages.py           # Message normalization helpers
     config.py             # Environment, client, workspace paths
 skills/                   # Project-level skill documents
@@ -37,11 +38,12 @@ Useful REPL commands:
 /mode auto
 /rules
 /hooks
+/memory
 q
 ```
 
 ## Notes
 
 Runtime artifacts are written to `.task_outputs/` and `.transcripts/`.
+Persistent local memories are written to `.memory/`.
 Local secrets should stay in `codes/.env`.
-

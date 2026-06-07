@@ -8,6 +8,7 @@ The implementation is split into small modules under easyclaude/:
 - todo.py: session planning
 - skills.py: on-demand skill loading
 - compact.py: context compaction
+- memory.py: persistent memory
 - permissions.py: permission modes and rules
 - hooks.py: workspace hook system
 """
@@ -26,14 +27,15 @@ from easyclaude.agent import AgentRuntime, LoopState
 from easyclaude.compact import CompactState
 from easyclaude.config import SKILLS_DIR, WORKDIR
 from easyclaude.hooks import HookManager
+from easyclaude.memory import MEMORY_GUIDANCE, MemoryManager
 from easyclaude.messages import extract_text
 from easyclaude.permissions import MODES, PermissionManager
 from easyclaude.skills import SkillRegistry
 from easyclaude.todo import TodoManager
 
 
-def build_system_prompt(skill_registry: SkillRegistry) -> str:
-    return f"""You are a coding agent at {WORKDIR}.
+def build_system_prompt(skill_registry: SkillRegistry, memory_manager: MemoryManager) -> str:
+    parts = [f"""You are a coding agent at {WORKDIR}.
 Use the todo tool for multi-step work.
 Keep exactly one step in_progress when a task has multiple steps.
 Refresh the plan as work advances. Prefer tools over prose.
@@ -42,7 +44,12 @@ Use load_skill when a task needs specialized instructions before you act.
 Skills available:
 {skill_registry.describe_available()}
 Keep working step by step, and use compact if the conversation gets too long.
-"""
+"""]
+    memory_section = memory_manager.load_memory_prompt()
+    if memory_section:
+        parts.append(memory_section)
+    parts.append(MEMORY_GUIDANCE)
+    return "\n\n".join(parts)
 
 
 def choose_permission_mode() -> PermissionManager:
@@ -53,17 +60,19 @@ def choose_permission_mode() -> PermissionManager:
     print(f"[Permission mode: {mode_input}]")
     return PermissionManager(mode=mode_input)
 
-
 def main() -> None:
     skill_registry = SkillRegistry(SKILLS_DIR)
+    memory_manager = MemoryManager()
+    memory_manager.load_all()
     todo = TodoManager()
     perms = choose_permission_mode()
     hooks = HookManager()
     hooks.run_hooks("SessionStart", {"tool_name": "", "tool_input": {}})
     runtime = AgentRuntime(
-        system=build_system_prompt(skill_registry),
+        system=build_system_prompt(skill_registry, memory_manager),
         todo=todo,
         skill_registry=skill_registry,
+        memory_manager=memory_manager,
         perms=perms,
         hooks=hooks,
     )
@@ -92,6 +101,12 @@ def main() -> None:
             continue
         if query.strip() == "/hooks":
             print(hooks.describe())
+            continue
+        if query.strip() == "/memory":
+            print(f"Memory dir: {memory_manager.memory_dir}")
+            print(f"Loaded memories: {len(memory_manager.memories)}")
+            for name, memory in memory_manager.memories.items():
+                print(f"  - {name}: {memory['description']} [{memory['type']}]")
             continue
 
         history.append({"role": "user", "content": query})
