@@ -125,6 +125,8 @@ class AgentRuntime:
                 if block.name == "compact":
                     manual_compact = True
                     compact_focus = tool_input.get("focus")
+                if block.name == "save_memory" and hasattr(self, "prompt_builder"):
+                    self.system = self.prompt_builder.build()
                 hook_context["tool_output"] = output
                 post_result = self.hooks.run_hooks("PostToolUse", hook_context)
                 for message in post_result.get("messages", []):

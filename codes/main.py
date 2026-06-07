@@ -10,6 +10,7 @@ The implementation is split into small modules under easyclaude/:
 - compact.py: context compaction
 - memory.py: persistent memory
 - permissions.py: permission modes and rules
+- system_prompt.py: structured prompt assembly
 - hooks.py: workspace hook system
 """
 try:
@@ -25,31 +26,15 @@ except ImportError:
 
 from easyclaude.agent import AgentRuntime, LoopState
 from easyclaude.compact import CompactState
-from easyclaude.config import SKILLS_DIR, WORKDIR
+from easyclaude.config import SKILLS_DIR
 from easyclaude.hooks import HookManager
-from easyclaude.memory import MEMORY_GUIDANCE, MemoryManager
+from easyclaude.memory import MemoryManager
 from easyclaude.messages import extract_text
 from easyclaude.permissions import MODES, PermissionManager
 from easyclaude.skills import SkillRegistry
+from easyclaude.system_prompt import DYNAMIC_BOUNDARY, SystemPromptBuilder
 from easyclaude.todo import TodoManager
-
-
-def build_system_prompt(skill_registry: SkillRegistry, memory_manager: MemoryManager) -> str:
-    parts = [f"""You are a coding agent at {WORKDIR}.
-Use the todo tool for multi-step work.
-Keep exactly one step in_progress when a task has multiple steps.
-Refresh the plan as work advances. Prefer tools over prose.
-Use the task tool to delegate exploration or subtasks.
-Use load_skill when a task needs specialized instructions before you act.
-Skills available:
-{skill_registry.describe_available()}
-Keep working step by step, and use compact if the conversation gets too long.
-"""]
-    memory_section = memory_manager.load_memory_prompt()
-    if memory_section:
-        parts.append(memory_section)
-    parts.append(MEMORY_GUIDANCE)
-    return "\n\n".join(parts)
+from easyclaude.tools import TOOLS
 
 
 def choose_permission_mode() -> PermissionManager:
@@ -68,14 +53,22 @@ def main() -> None:
     perms = choose_permission_mode()
     hooks = HookManager()
     hooks.run_hooks("SessionStart", {"tool_name": "", "tool_input": {}})
+    prompt_builder = SystemPromptBuilder(
+        tools=TOOLS,
+        skill_registry=skill_registry,
+        memory_manager=memory_manager,
+    )
+    system_prompt = prompt_builder.build()
+    print(f"[System prompt assembled: {len(system_prompt)} chars, {len(prompt_builder.build_sections())} sections]")
     runtime = AgentRuntime(
-        system=build_system_prompt(skill_registry, memory_manager),
+        system=system_prompt,
         todo=todo,
         skill_registry=skill_registry,
         memory_manager=memory_manager,
         perms=perms,
         hooks=hooks,
     )
+    runtime.prompt_builder = prompt_builder
 
     history = []
     compact_state = CompactState()
@@ -107,6 +100,17 @@ def main() -> None:
             print(f"Loaded memories: {len(memory_manager.memories)}")
             for name, memory in memory_manager.memories.items():
                 print(f"  - {name}: {memory['description']} [{memory['type']}]")
+            continue
+        if query.strip() == "/prompt":
+            print("--- System Prompt ---")
+            print(prompt_builder.build())
+            print("--- End ---")
+            continue
+        if query.strip() == "/sections":
+            prompt = prompt_builder.build()
+            for line in prompt.splitlines():
+                if line.startswith("# ") or line == DYNAMIC_BOUNDARY:
+                    print(f"  {line}")
             continue
 
         history.append({"role": "user", "content": query})

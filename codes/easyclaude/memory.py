@@ -1,3 +1,4 @@
+import os
 import re
 from pathlib import Path
 
@@ -7,6 +8,21 @@ MEMORY_DIR = WORKDIR / ".memory"
 MEMORY_INDEX = MEMORY_DIR / "MEMORY.md"
 MEMORY_TYPES = ("user", "feedback", "project", "reference")
 MAX_INDEX_LINES = 200
+
+MEMORY_GUIDANCE = """# Memory Guidance
+When to save memories:
+- User states a preference ("I like tabs", "always use pytest") -> type: user
+- User corrects you ("don't do X", "that was wrong because...") -> type: feedback
+- You learn a project fact that is not easy to infer from current code alone
+  (for example: a rule exists because of compliance, or a legacy module must
+  stay untouched for business reasons) -> type: project
+- You learn where an external resource lives (ticket board, dashboard, docs URL)
+  -> type: reference
+
+When NOT to save:
+- Anything easily derivable from code (function signatures, file structure, directory layout)
+- Temporary task state (current branch, open PR numbers, current TODOs)
+- Secrets or credentials (API keys, passwords)"""
 
 class MemoryManager:
     """
@@ -90,7 +106,11 @@ class MemoryManager:
         }
         # Rebuild MEMORY.md index
         self._rebuild_index()
-        return f"Saved memory '{name}' [{mem_type}] to {file_path.relative_to(WORKDIR)}"
+        try:
+            display_path = file_path.relative_to(WORKDIR)
+        except ValueError:
+            display_path = file_path
+        return f"Saved memory '{name}' [{mem_type}] to {display_path}"
     def _rebuild_index(self):
         """Rebuild MEMORY.md from current in-memory state, capped at 200 lines."""
         lines = ["# Memory Index", ""]
@@ -100,7 +120,7 @@ class MemoryManager:
                 lines.append(f"... (truncated at {MAX_INDEX_LINES} lines)")
                 break
         self.memory_dir.mkdir(parents=True, exist_ok=True)
-        MEMORY_INDEX.write_text("\n".join(lines) + "\n")
+        (self.memory_dir / "MEMORY.md").write_text("\n".join(lines) + "\n")
     def _parse_frontmatter(self, text: str) -> dict | None:
         """Parse --- delimited frontmatter + body content."""
         match = re.match(r"^---\s*\n(.*?)\n---\s*\n(.*)", text, re.DOTALL)
@@ -242,18 +262,3 @@ class DreamConsolidator:
                     self.lock_file.unlink()
         except (ValueError, OSError):
             pass
-
-MEMORY_GUIDANCE = """
-When to save memories:
-- User states a preference ("I like tabs", "always use pytest") -> type: user
-- User corrects you ("don't do X", "that was wrong because...") -> type: feedback
-- You learn a project fact that is not easy to infer from current code alone
-  (for example: a rule exists because of compliance, or a legacy module must
-  stay untouched for business reasons) -> type: project
-- You learn where an external resource lives (ticket board, dashboard, docs URL)
-  -> type: reference
-When NOT to save:
-- Anything easily derivable from code (function signatures, file structure, directory layout)
-- Temporary task state (current branch, open PR numbers, current TODOs)
-- Secrets or credentials (API keys, passwords)
-"""

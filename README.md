@@ -16,6 +16,7 @@ codes/
     permissions.py        # Permission modes, rules, bash validation
     hooks.py              # Hook loading and execution
     memory.py             # Persistent memory across sessions
+    system_prompt.py      # Structured system prompt assembly
     messages.py           # Message normalization helpers
     config.py             # Environment, client, workspace paths
 skills/                   # Project-level skill documents
