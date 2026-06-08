@@ -12,6 +12,7 @@ from .compact import (
 from .config import MODEL, WORKDIR, client
 from .messages import normalize_messages
 from .permissions import PermissionManager
+from .recovery import CONTINUATION_MESSAGE, MAX_RECOVERY_ATTEMPTS, call_with_recovery
 from .tools import CHILD_TOOLS, TOOLS, build_tool_handlers
 
 
@@ -23,6 +24,7 @@ class LoopState:
     messages: list
     turn_count: int = 1
     transition_reason: str | None = None
+    max_output_recovery_count: int = 0
 
 
 class AgentRuntime:
@@ -160,14 +162,40 @@ class AgentRuntime:
             print("[auto compact]")
             state.messages[:] = compact_history(state.messages, compact_state)
 
-        response = client.messages.create(
-            model=MODEL,
-            system=self.system,
-            messages=normalize_messages(state.messages),
-            tools=TOOLS,
-            max_tokens=8000,
+        response = call_with_recovery(
+            lambda: client.messages.create(
+                model=MODEL,
+                system=self.system,
+                messages=normalize_messages(state.messages),
+                tools=TOOLS,
+                max_tokens=8000,
+            ),
+            state.messages,
+            compact_state,
         )
+        if response is None:
+            state.transition_reason = None
+            return False
         state.messages.append({"role": "assistant", "content": response.content})
+        if response.stop_reason == "max_tokens":
+            state.max_output_recovery_count += 1
+            if state.max_output_recovery_count <= MAX_RECOVERY_ATTEMPTS:
+                print(
+                    f"[Recovery] max_tokens hit "
+                    f"({state.max_output_recovery_count}/{MAX_RECOVERY_ATTEMPTS}). "
+                    "Injecting continuation..."
+                )
+                state.messages.append({"role": "user", "content": CONTINUATION_MESSAGE})
+                state.turn_count += 1
+                state.transition_reason = "max_tokens_recovery"
+                return True
+            print(
+                f"[Error] max_tokens recovery exhausted "
+                f"({MAX_RECOVERY_ATTEMPTS} attempts). Stopping."
+            )
+            state.transition_reason = None
+            return False
+        state.max_output_recovery_count = 0
         if response.stop_reason != "tool_use":
             state.transition_reason = None
             return False

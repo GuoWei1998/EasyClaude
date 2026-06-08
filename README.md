@@ -13,6 +13,7 @@ codes/
     todo.py               # Todo/session planning
     skills.py             # Skill registry and load_skill support
     compact.py            # Context compaction and large-output persistence
+    recovery.py           # Error recovery, retry, continuation
     permissions.py        # Permission modes, rules, bash validation
     hooks.py              # Hook loading and execution
     memory.py             # Persistent memory across sessions
