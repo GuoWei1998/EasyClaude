@@ -121,31 +121,50 @@ TOOLS = [
         },
     },
     {
-        "name": "todo",
-        "description": "Rewrite the current session plan for multi-step work.",
+        "name": "task_create",
+        "description": "Create a persistent task graph node.",
         "input_schema": {
             "type": "object",
             "properties": {
-                "items": {
-                    "type": "array",
-                    "items": {
-                        "type": "object",
-                        "properties": {
-                            "content": {"type": "string"},
-                            "status": {
-                                "type": "string",
-                                "enum": ["pending", "in_progress", "completed"],
-                            },
-                            "activeForm": {
-                                "type": "string",
-                                "description": "Optional present-continuous label.",
-                            },
-                        },
-                        "required": ["content", "status"],
-                    },
-                },
+                "subject": {"type": "string"},
+                "description": {"type": "string"},
+                "blockedBy": {"type": "array", "items": {"type": "integer"}},
+                "owner": {"type": "string"},
             },
-            "required": ["items"],
+            "required": ["subject"],
+        },
+    },
+    {
+        "name": "task_update",
+        "description": "Update a persistent task node status, owner, or dependencies.",
+        "input_schema": {
+            "type": "object",
+            "properties": {
+                "task_id": {"type": "integer"},
+                "status": {
+                    "type": "string",
+                    "enum": ["pending", "in_progress", "completed", "deleted"],
+                },
+                "owner": {"type": "string"},
+                "addBlockedBy": {"type": "array", "items": {"type": "integer"}},
+                "addBlocks": {"type": "array", "items": {"type": "integer"}},
+                "removeBlockedBy": {"type": "array", "items": {"type": "integer"}},
+            },
+            "required": ["task_id"],
+        },
+    },
+    {
+        "name": "task_list",
+        "description": "List persistent task graph nodes and ready tasks.",
+        "input_schema": {"type": "object", "properties": {}},
+    },
+    {
+        "name": "task_get",
+        "description": "Get full details of a persistent task by ID.",
+        "input_schema": {
+            "type": "object",
+            "properties": {"task_id": {"type": "integer"}},
+            "required": ["task_id"],
         },
     },
     {
@@ -204,16 +223,28 @@ CHILD_TOOLS = [
 ]
 
 
-def build_tool_handlers(todo, skill_registry, memory_manager):
+def build_tool_handlers(todo, skill_registry, memory_manager, task_manager):
     return {
         "bash": lambda **kw: run_bash(kw["command"]),
         "read_file": lambda **kw: run_read(kw["path"], kw.get("limit")),
         "write_file": lambda **kw: run_write(kw["path"], kw["content"]),
         "edit_file": lambda **kw: run_edit(kw["path"], kw["old_text"], kw["new_text"]),
-        "todo": lambda **kw: todo.update(kw["items"]),
         "load_skill": lambda **kw: skill_registry.load_full_text(kw["name"]),
         "compact": lambda **kw: run_compact(),
         "save_memory": lambda **kw: memory_manager.save_memory(
             kw["name"], kw["description"], kw["type"], kw["content"]
         ),
+        "task_create": lambda **kw: task_manager.create(
+            kw["subject"], kw.get("description", ""), kw.get("blockedBy"), kw.get("owner", "")
+        ),
+        "task_update": lambda **kw: task_manager.update(
+            kw["task_id"],
+            kw.get("status"),
+            kw.get("owner"),
+            kw.get("addBlockedBy"),
+            kw.get("addBlocks"),
+            kw.get("removeBlockedBy"),
+        ),
+        "task_list": lambda **kw: task_manager.list_all(),
+        "task_get": lambda **kw: task_manager.get(kw["task_id"]),
     }

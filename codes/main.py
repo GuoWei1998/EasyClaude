@@ -9,6 +9,7 @@ The implementation is split into small modules under easyclaude/:
 - skills.py: on-demand skill loading
 - compact.py: context compaction
 - memory.py: persistent memory
+- task_graph.py: persistent dependency task graph
 - permissions.py: permission modes and rules
 - system_prompt.py: structured prompt assembly
 - hooks.py: workspace hook system
@@ -33,6 +34,7 @@ from easyclaude.messages import extract_text
 from easyclaude.permissions import MODES, PermissionManager
 from easyclaude.skills import SkillRegistry
 from easyclaude.system_prompt import DYNAMIC_BOUNDARY, SystemPromptBuilder
+from easyclaude.task_graph import TaskManager
 from easyclaude.todo import TodoManager
 from easyclaude.tools import TOOLS
 
@@ -49,6 +51,7 @@ def main() -> None:
     skill_registry = SkillRegistry(SKILLS_DIR)
     memory_manager = MemoryManager()
     memory_manager.load_all()
+    task_manager = TaskManager()
     todo = TodoManager()
     perms = choose_permission_mode()
     hooks = HookManager()
@@ -65,6 +68,7 @@ def main() -> None:
         todo=todo,
         skill_registry=skill_registry,
         memory_manager=memory_manager,
+        task_manager=task_manager,
         perms=perms,
         hooks=hooks,
     )
@@ -100,6 +104,9 @@ def main() -> None:
             print(f"Loaded memories: {len(memory_manager.memories)}")
             for name, memory in memory_manager.memories.items():
                 print(f"  - {name}: {memory['description']} [{memory['type']}]")
+            continue
+        if query.strip() == "/tasks":
+            print(task_manager.list_all())
             continue
         if query.strip() == "/prompt":
             print("--- System Prompt ---")

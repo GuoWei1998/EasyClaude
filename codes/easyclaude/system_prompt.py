@@ -34,9 +34,9 @@ class SystemPromptBuilder:
             f"You are a coding agent operating in {self.workdir}.\n"
             "Use the provided tools to explore, read, write, and edit files.\n"
             "Always verify before assuming. Prefer reading files over guessing.\n"
-            "Use the todo tool for multi-step work.\n"
-            "Keep exactly one step in_progress when a task has multiple steps.\n"
-            "Refresh the plan as work advances. Prefer tools over prose.\n"
+            "Use task graph tools for multi-step work: task_create, task_update, task_list, task_get.\n"
+            "Represent dependencies with blockedBy/blocks instead of a flat todo list.\n"
+            "Keep task status current as work advances. Prefer tools over prose.\n"
             "Use the task tool to delegate exploration or subtasks.\n"
             "Use load_skill when a task needs specialized instructions before you act.\n"
             "Keep working step by step, and use compact if the conversation gets too long."
@@ -125,4 +125,3 @@ def build_system_reminder(extra: str = None) -> dict | None:
         return None
     content = f"<system-reminder>\n{extra}\n</system-reminder>"
     return {"role": "user", "content": content}
-

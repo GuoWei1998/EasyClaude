@@ -28,12 +28,12 @@ class LoopState:
 
 
 class AgentRuntime:
-    def __init__(self, system: str, todo, skill_registry, memory_manager, perms: PermissionManager, hooks):
+    def __init__(self, system: str, todo, skill_registry, memory_manager, task_manager, perms: PermissionManager, hooks):
         self.system = system
         self.todo = todo
         self.perms = perms
         self.hooks = hooks
-        self.tool_handlers = build_tool_handlers(todo, skill_registry, memory_manager)
+        self.tool_handlers = build_tool_handlers(todo, skill_registry, memory_manager, task_manager)
 
     def run_subagent(self, prompt: str) -> str:
         sub_messages = [{"role": "user", "content": prompt}]
