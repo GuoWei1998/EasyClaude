@@ -13,6 +13,7 @@ from .config import MODEL, WORKDIR, client
 from .messages import normalize_messages
 from .permissions import PermissionManager
 from .recovery import CONTINUATION_MESSAGE, MAX_RECOVERY_ATTEMPTS, call_with_recovery
+from .task_graph import TASK_REMINDER_INTERVAL
 from .tools import CHILD_TOOLS, TOOLS, build_tool_handlers
 
 
@@ -31,9 +32,11 @@ class AgentRuntime:
     def __init__(self, system: str, todo, skill_registry, memory_manager, task_manager, perms: PermissionManager, hooks):
         self.system = system
         self.todo = todo
+        self.task_manager = task_manager
         self.perms = perms
         self.hooks = hooks
         self.tool_handlers = build_tool_handlers(todo, skill_registry, memory_manager, task_manager)
+        self.rounds_since_task_graph_update = 0
 
     def run_subagent(self, prompt: str) -> str:
         sub_messages = [{"role": "user", "content": prompt}]
@@ -71,7 +74,7 @@ class AgentRuntime:
         results = []
         manual_compact = False
         compact_focus = None
-        used_todo = False
+        used_task_graph = False
         for block in response_content:
             if block.type != "tool_use":
                 continue
@@ -143,15 +146,17 @@ class AgentRuntime:
                 "tool_use_id": block.id,
                 "content": content,
             })
-            if block.name == "todo":
-                used_todo = True
+            if block.name in {"task_create", "task_update", "task_list", "task_get"}:
+                used_task_graph = True
             print(block.name, "\n")
 
-        if used_todo:
-            self.todo.state.rounds_since_update = 0
+        if used_task_graph:
+            self.rounds_since_task_graph_update = 0
         else:
-            self.todo.note_round_without_update()
-            reminder = self.todo.reminder()
+            self.rounds_since_task_graph_update += 1
+            reminder = None
+            if self.rounds_since_task_graph_update >= TASK_REMINDER_INTERVAL:
+                reminder = self.task_manager.reminder()
             if reminder and results:
                 results[-1]["content"] = f"{results[-1]['content']}\n\n{reminder}"
         return results, manual_compact, compact_focus

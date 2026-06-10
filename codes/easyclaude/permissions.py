@@ -4,7 +4,8 @@ from fnmatch import fnmatch
 
 
 MODES = ("default", "plan", "auto")
-READ_ONLY_TOOLS = {"read_file", "bash_readonly"}
+READ_ONLY_TOOLS = {"read_file", "bash_readonly", "task_list", "task_get"}
+TASK_GRAPH_TOOLS = {"task_create", "task_update", "task_list", "task_get"}
 WRITE_TOOLS = {"write_file", "edit_file", "bash"}
 
 
@@ -44,6 +45,10 @@ DEFAULT_RULES = [
     {"tool": "bash", "content": "rm -rf /", "behavior": "deny"},
     {"tool": "bash", "content": "sudo *", "behavior": "deny"},
     {"tool": "read_file", "path": "*", "behavior": "allow"},
+    {"tool": "task_create", "behavior": "allow"},
+    {"tool": "task_update", "behavior": "allow"},
+    {"tool": "task_list", "behavior": "allow"},
+    {"tool": "task_get", "behavior": "allow"},
 ]
 
 
@@ -130,4 +135,3 @@ class PermissionManager:
             if not fnmatch(command, rule["content"]):
                 return False
         return True
-

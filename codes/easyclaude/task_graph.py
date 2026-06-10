@@ -6,6 +6,7 @@ from .config import WORKDIR
 
 TASKS_DIR = WORKDIR / ".tasks"
 TASK_STATUSES = ("pending", "in_progress", "completed", "deleted")
+TASK_REMINDER_INTERVAL = 3
 
 
 class TaskManager:
@@ -154,6 +155,22 @@ class TaskManager:
             ready.append(task["id"])
         return ready
 
+    def has_tasks(self) -> bool:
+        return any(task.get("status") != "deleted" for task in self._all_tasks())
+
+    def reminder(self) -> str | None:
+        if not self.has_tasks():
+            return None
+        ready = self.ready_ids()
+        ready_note = f" Ready task IDs: {ready}." if ready else ""
+        return (
+            "<reminder>"
+            "You have a persistent task graph. Before continuing, call task_list "
+            "and use task_update if task status, ownership, or dependencies changed."
+            f"{ready_note}"
+            "</reminder>"
+        )
+
     def _assert_task_exists(self, task_id: int) -> None:
         self._load(task_id)
 
@@ -186,4 +203,3 @@ class TaskManager:
                 continue
             stack.extend(task.get("blocks", []))
         return False
-
