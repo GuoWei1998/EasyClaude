@@ -19,6 +19,7 @@ codes/
     memory.py             # Persistent memory across sessions
     task_graph.py         # Persistent dependency task graph
     background.py         # Long-running background tasks and notifications
+    scheduler.py          # Cron-style scheduled prompts
     system_prompt.py      # Structured system prompt assembly
     messages.py           # Message normalization helpers
     config.py             # Environment, client, workspace paths
@@ -45,6 +46,7 @@ Useful REPL commands:
 /memory
 /tasks
 /background
+/cron
 q
 ```
 
@@ -54,4 +56,5 @@ Runtime artifacts are written to `.task_outputs/` and `.transcripts/`.
 Persistent local memories are written to `.memory/`.
 Persistent task graph records are written to `.tasks/`.
 Background task records and logs are written to `.runtime-tasks/`.
+Durable scheduled tasks are written to `.claude/scheduled_tasks.json`.
 Local secrets should stay in `codes/.env`.

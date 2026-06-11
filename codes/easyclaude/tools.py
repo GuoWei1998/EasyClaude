@@ -185,6 +185,46 @@ TOOLS = [
         },
     },
     {
+        "name": "cron_create",
+        "description": "Schedule a recurring or one-shot future prompt using a 5-field cron expression.",
+        "input_schema": {
+            "type": "object",
+            "properties": {
+                "cron": {
+                    "type": "string",
+                    "description": "5-field cron expression: minute hour day-of-month month day-of-week",
+                },
+                "prompt": {
+                    "type": "string",
+                    "description": "Prompt to inject into the conversation when the schedule fires.",
+                },
+                "recurring": {
+                    "type": "boolean",
+                    "description": "true repeats until deleted, false fires once then deletes itself.",
+                },
+                "durable": {
+                    "type": "boolean",
+                    "description": "true persists to .claude/scheduled_tasks.json, false is session-only.",
+                },
+            },
+            "required": ["cron", "prompt"],
+        },
+    },
+    {
+        "name": "cron_delete",
+        "description": "Delete a scheduled task by id.",
+        "input_schema": {
+            "type": "object",
+            "properties": {"id": {"type": "string"}},
+            "required": ["id"],
+        },
+    },
+    {
+        "name": "cron_list",
+        "description": "List scheduled tasks.",
+        "input_schema": {"type": "object", "properties": {}},
+    },
+    {
         "name": "task",
         "description": "Spawn a subagent with fresh context. It shares the filesystem but not conversation history.",
         "input_schema": {
@@ -240,7 +280,14 @@ CHILD_TOOLS = [
 ]
 
 
-def build_tool_handlers(todo, skill_registry, memory_manager, task_manager, background_manager=None):
+def build_tool_handlers(
+    todo,
+    skill_registry,
+    memory_manager,
+    task_manager,
+    background_manager=None,
+    scheduler=None,
+):
     return {
         "bash": lambda **kw: run_bash(kw["command"]),
         "read_file": lambda **kw: run_read(kw["path"], kw.get("limit")),
@@ -273,5 +320,25 @@ def build_tool_handlers(todo, skill_registry, memory_manager, task_manager, back
             background_manager.check(kw.get("task_id"))
             if background_manager
             else "Error: background manager is not configured"
+        ),
+        "cron_create": lambda **kw: (
+            scheduler.create(
+                kw["cron"],
+                kw["prompt"],
+                kw.get("recurring", True),
+                kw.get("durable", False),
+            )
+            if scheduler
+            else "Error: scheduler is not configured"
+        ),
+        "cron_delete": lambda **kw: (
+            scheduler.delete(kw["id"])
+            if scheduler
+            else "Error: scheduler is not configured"
+        ),
+        "cron_list": lambda **kw: (
+            scheduler.list_tasks()
+            if scheduler
+            else "Error: scheduler is not configured"
         ),
     }

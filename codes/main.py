@@ -11,10 +11,13 @@ The implementation is split into small modules under easyclaude/:
 - memory.py: persistent memory
 - task_graph.py: persistent dependency task graph
 - background.py: long-running background tasks and notifications
+- scheduler.py: cron-style scheduled prompts
 - permissions.py: permission modes and rules
 - system_prompt.py: structured prompt assembly
 - hooks.py: workspace hook system
 """
+import atexit
+
 try:
     import readline
 
@@ -34,6 +37,7 @@ from easyclaude.hooks import HookManager
 from easyclaude.memory import MemoryManager
 from easyclaude.messages import extract_text
 from easyclaude.permissions import MODES, PermissionManager
+from easyclaude.scheduler import CronScheduler
 from easyclaude.skills import SkillRegistry
 from easyclaude.system_prompt import DYNAMIC_BOUNDARY, SystemPromptBuilder
 from easyclaude.task_graph import TaskManager
@@ -55,6 +59,9 @@ def main() -> None:
     memory_manager.load_all()
     task_manager = TaskManager()
     background_manager = BackgroundManager()
+    scheduler = CronScheduler()
+    scheduler.start()
+    atexit.register(scheduler.stop)
     todo = TodoManager()
     perms = choose_permission_mode()
     hooks = HookManager()
@@ -73,6 +80,7 @@ def main() -> None:
         memory_manager=memory_manager,
         task_manager=task_manager,
         background_manager=background_manager,
+        scheduler=scheduler,
         perms=perms,
         hooks=hooks,
     )
@@ -114,6 +122,9 @@ def main() -> None:
             continue
         if query.strip() == "/background":
             print(background_manager.check())
+            continue
+        if query.strip() == "/cron":
+            print(scheduler.list_tasks())
             continue
         if query.strip() == "/prompt":
             print("--- System Prompt ---")

@@ -37,6 +37,7 @@ class AgentRuntime:
         memory_manager,
         task_manager,
         background_manager,
+        scheduler,
         perms: PermissionManager,
         hooks,
     ):
@@ -44,10 +45,11 @@ class AgentRuntime:
         self.todo = todo
         self.task_manager = task_manager
         self.background_manager = background_manager
+        self.scheduler = scheduler
         self.perms = perms
         self.hooks = hooks
         self.tool_handlers = build_tool_handlers(
-            todo, skill_registry, memory_manager, task_manager, background_manager
+            todo, skill_registry, memory_manager, task_manager, background_manager, scheduler
         )
         self.rounds_since_task_graph_update = 0
 
@@ -58,6 +60,15 @@ class AgentRuntime:
             return False
         messages.append({"role": "user", "content": content})
         print(f"[Background] delivered {len(notifications)} completed task notification(s)")
+        return True
+
+    def inject_scheduled_notifications(self, messages: list) -> bool:
+        notifications = self.scheduler.drain_notifications()
+        content = self.scheduler.format_notifications(notifications)
+        if not content:
+            return False
+        messages.append({"role": "user", "content": content})
+        print(f"[Cron] delivered {len(notifications)} scheduled task notification(s)")
         return True
 
     def run_subagent(self, prompt: str) -> str:
@@ -189,6 +200,7 @@ class AgentRuntime:
             print("[auto compact]")
             state.messages[:] = compact_history(state.messages, compact_state)
         self.inject_background_notifications(state.messages)
+        self.inject_scheduled_notifications(state.messages)
 
         response = call_with_recovery(
             lambda: client.messages.create(

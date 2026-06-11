@@ -38,6 +38,7 @@ class SystemPromptBuilder:
             "Represent dependencies with blockedBy/blocks instead of a flat todo list.\n"
             "Keep task status current as work advances. Prefer tools over prose.\n"
             "Use background_run for long-running shell commands, then use check_background or background results to continue.\n"
+            "Use cron_create, cron_delete, and cron_list to schedule future prompts when the user asks for timed or recurring work.\n"
             "Use the task tool to delegate exploration or subtasks.\n"
             "Use load_skill when a task needs specialized instructions before you act.\n"
             "Keep working step by step, and use compact if the conversation gets too long."

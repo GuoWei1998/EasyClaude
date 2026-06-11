@@ -5,9 +5,16 @@ from fnmatch import fnmatch
 
 MODES = ("default", "plan", "auto")
 SHELL_TOOLS = {"bash", "background_run"}
-READ_ONLY_TOOLS = {"read_file", "bash_readonly", "task_list", "task_get", "check_background"}
+READ_ONLY_TOOLS = {
+    "read_file",
+    "bash_readonly",
+    "task_list",
+    "task_get",
+    "check_background",
+    "cron_list",
+}
 TASK_GRAPH_TOOLS = {"task_create", "task_update", "task_list", "task_get"}
-WRITE_TOOLS = {"write_file", "edit_file", "bash", "background_run"}
+WRITE_TOOLS = {"write_file", "edit_file", "bash", "background_run", "cron_create", "cron_delete"}
 
 
 class BashSecurityValidator:
@@ -49,6 +56,7 @@ DEFAULT_RULES = [
     {"tool": "background_run", "content": "sudo *", "behavior": "deny"},
     {"tool": "read_file", "path": "*", "behavior": "allow"},
     {"tool": "check_background", "behavior": "allow"},
+    {"tool": "cron_list", "behavior": "allow"},
     {"tool": "task_create", "behavior": "allow"},
     {"tool": "task_update", "behavior": "allow"},
     {"tool": "task_list", "behavior": "allow"},
