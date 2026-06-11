@@ -18,6 +18,7 @@ codes/
     hooks.py              # Hook loading and execution
     memory.py             # Persistent memory across sessions
     task_graph.py         # Persistent dependency task graph
+    background.py         # Long-running background tasks and notifications
     system_prompt.py      # Structured system prompt assembly
     messages.py           # Message normalization helpers
     config.py             # Environment, client, workspace paths
@@ -43,6 +44,7 @@ Useful REPL commands:
 /hooks
 /memory
 /tasks
+/background
 q
 ```
 
@@ -51,4 +53,5 @@ q
 Runtime artifacts are written to `.task_outputs/` and `.transcripts/`.
 Persistent local memories are written to `.memory/`.
 Persistent task graph records are written to `.tasks/`.
+Background task records and logs are written to `.runtime-tasks/`.
 Local secrets should stay in `codes/.env`.

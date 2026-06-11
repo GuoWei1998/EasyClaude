@@ -10,6 +10,7 @@ The implementation is split into small modules under easyclaude/:
 - compact.py: context compaction
 - memory.py: persistent memory
 - task_graph.py: persistent dependency task graph
+- background.py: long-running background tasks and notifications
 - permissions.py: permission modes and rules
 - system_prompt.py: structured prompt assembly
 - hooks.py: workspace hook system
@@ -26,6 +27,7 @@ except ImportError:
     pass
 
 from easyclaude.agent import AgentRuntime, LoopState
+from easyclaude.background import BackgroundManager
 from easyclaude.compact import CompactState
 from easyclaude.config import SKILLS_DIR
 from easyclaude.hooks import HookManager
@@ -52,6 +54,7 @@ def main() -> None:
     memory_manager = MemoryManager()
     memory_manager.load_all()
     task_manager = TaskManager()
+    background_manager = BackgroundManager()
     todo = TodoManager()
     perms = choose_permission_mode()
     hooks = HookManager()
@@ -69,6 +72,7 @@ def main() -> None:
         skill_registry=skill_registry,
         memory_manager=memory_manager,
         task_manager=task_manager,
+        background_manager=background_manager,
         perms=perms,
         hooks=hooks,
     )
@@ -107,6 +111,9 @@ def main() -> None:
             continue
         if query.strip() == "/tasks":
             print(task_manager.list_all())
+            continue
+        if query.strip() == "/background":
+            print(background_manager.check())
             continue
         if query.strip() == "/prompt":
             print("--- System Prompt ---")

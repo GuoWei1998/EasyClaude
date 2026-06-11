@@ -4,9 +4,10 @@ from fnmatch import fnmatch
 
 
 MODES = ("default", "plan", "auto")
-READ_ONLY_TOOLS = {"read_file", "bash_readonly", "task_list", "task_get"}
+SHELL_TOOLS = {"bash", "background_run"}
+READ_ONLY_TOOLS = {"read_file", "bash_readonly", "task_list", "task_get", "check_background"}
 TASK_GRAPH_TOOLS = {"task_create", "task_update", "task_list", "task_get"}
-WRITE_TOOLS = {"write_file", "edit_file", "bash"}
+WRITE_TOOLS = {"write_file", "edit_file", "bash", "background_run"}
 
 
 class BashSecurityValidator:
@@ -44,7 +45,10 @@ bash_validator = BashSecurityValidator()
 DEFAULT_RULES = [
     {"tool": "bash", "content": "rm -rf /", "behavior": "deny"},
     {"tool": "bash", "content": "sudo *", "behavior": "deny"},
+    {"tool": "background_run", "content": "rm -rf /", "behavior": "deny"},
+    {"tool": "background_run", "content": "sudo *", "behavior": "deny"},
     {"tool": "read_file", "path": "*", "behavior": "allow"},
+    {"tool": "check_background", "behavior": "allow"},
     {"tool": "task_create", "behavior": "allow"},
     {"tool": "task_update", "behavior": "allow"},
     {"tool": "task_list", "behavior": "allow"},
@@ -65,7 +69,7 @@ class PermissionManager:
 
     def check(self, tool_name: str, tool_input: dict) -> dict:
         warning_reason = None
-        if tool_name == "bash":
+        if tool_name in SHELL_TOOLS:
             command = tool_input.get("command", "")
             failures = bash_validator.validate(command)
             if failures:
@@ -73,9 +77,9 @@ class PermissionManager:
                 severe_hits = [f for f in failures if f[0] in severe]
                 if severe_hits:
                     desc = bash_validator.describe_failures(command)
-                    return {"behavior": "deny", "reason": f"Bash validator: {desc}"}
+                    return {"behavior": "deny", "reason": f"Shell validator: {desc}"}
                 desc = bash_validator.describe_failures(command)
-                warning_reason = f"Bash validator flagged: {desc}"
+                warning_reason = f"Shell validator flagged: {desc}"
 
         for rule in self.rules:
             if rule["behavior"] != "deny":

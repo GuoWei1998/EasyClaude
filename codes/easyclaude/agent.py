@@ -29,14 +29,36 @@ class LoopState:
 
 
 class AgentRuntime:
-    def __init__(self, system: str, todo, skill_registry, memory_manager, task_manager, perms: PermissionManager, hooks):
+    def __init__(
+        self,
+        system: str,
+        todo,
+        skill_registry,
+        memory_manager,
+        task_manager,
+        background_manager,
+        perms: PermissionManager,
+        hooks,
+    ):
         self.system = system
         self.todo = todo
         self.task_manager = task_manager
+        self.background_manager = background_manager
         self.perms = perms
         self.hooks = hooks
-        self.tool_handlers = build_tool_handlers(todo, skill_registry, memory_manager, task_manager)
+        self.tool_handlers = build_tool_handlers(
+            todo, skill_registry, memory_manager, task_manager, background_manager
+        )
         self.rounds_since_task_graph_update = 0
+
+    def inject_background_notifications(self, messages: list) -> bool:
+        notifications = self.background_manager.drain_notifications()
+        content = self.background_manager.format_notifications(notifications)
+        if not content:
+            return False
+        messages.append({"role": "user", "content": content})
+        print(f"[Background] delivered {len(notifications)} completed task notification(s)")
+        return True
 
     def run_subagent(self, prompt: str) -> str:
         sub_messages = [{"role": "user", "content": prompt}]
@@ -166,6 +188,7 @@ class AgentRuntime:
         if estimate_context_size(state.messages) > CONTEXT_LIMIT:
             print("[auto compact]")
             state.messages[:] = compact_history(state.messages, compact_state)
+        self.inject_background_notifications(state.messages)
 
         response = call_with_recovery(
             lambda: client.messages.create(

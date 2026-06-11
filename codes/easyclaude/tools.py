@@ -168,6 +168,23 @@ TOOLS = [
         },
     },
     {
+        "name": "background_run",
+        "description": "Run a long-running shell command in the background and return a task id immediately.",
+        "input_schema": {
+            "type": "object",
+            "properties": {"command": {"type": "string"}},
+            "required": ["command"],
+        },
+    },
+    {
+        "name": "check_background",
+        "description": "Check one background task by task_id, or list all background tasks when task_id is omitted.",
+        "input_schema": {
+            "type": "object",
+            "properties": {"task_id": {"type": "string"}},
+        },
+    },
+    {
         "name": "task",
         "description": "Spawn a subagent with fresh context. It shares the filesystem but not conversation history.",
         "input_schema": {
@@ -223,7 +240,7 @@ CHILD_TOOLS = [
 ]
 
 
-def build_tool_handlers(todo, skill_registry, memory_manager, task_manager):
+def build_tool_handlers(todo, skill_registry, memory_manager, task_manager, background_manager=None):
     return {
         "bash": lambda **kw: run_bash(kw["command"]),
         "read_file": lambda **kw: run_read(kw["path"], kw.get("limit")),
@@ -247,4 +264,14 @@ def build_tool_handlers(todo, skill_registry, memory_manager, task_manager):
         ),
         "task_list": lambda **kw: task_manager.list_all(),
         "task_get": lambda **kw: task_manager.get(kw["task_id"]),
+        "background_run": lambda **kw: (
+            background_manager.run(kw["command"])
+            if background_manager
+            else "Error: background manager is not configured"
+        ),
+        "check_background": lambda **kw: (
+            background_manager.check(kw.get("task_id"))
+            if background_manager
+            else "Error: background manager is not configured"
+        ),
     }
