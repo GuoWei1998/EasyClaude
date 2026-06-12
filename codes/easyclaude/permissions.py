@@ -12,9 +12,22 @@ READ_ONLY_TOOLS = {
     "task_get",
     "check_background",
     "cron_list",
+    "list_teammates",
+    "read_inbox",
 }
 TASK_GRAPH_TOOLS = {"task_create", "task_update", "task_list", "task_get"}
-WRITE_TOOLS = {"write_file", "edit_file", "bash", "background_run", "cron_create", "cron_delete"}
+WRITE_TOOLS = {
+    "write_file",
+    "edit_file",
+    "bash",
+    "background_run",
+    "cron_create",
+    "cron_delete",
+    "spawn_teammate",
+    "send_message",
+    "broadcast",
+    "shutdown_teammate",
+}
 
 
 class BashSecurityValidator:
@@ -57,6 +70,8 @@ DEFAULT_RULES = [
     {"tool": "read_file", "path": "*", "behavior": "allow"},
     {"tool": "check_background", "behavior": "allow"},
     {"tool": "cron_list", "behavior": "allow"},
+    {"tool": "list_teammates", "behavior": "allow"},
+    {"tool": "read_inbox", "behavior": "allow"},
     {"tool": "task_create", "behavior": "allow"},
     {"tool": "task_update", "behavior": "allow"},
     {"tool": "task_list", "behavior": "allow"},

@@ -12,6 +12,7 @@ The implementation is split into small modules under easyclaude/:
 - task_graph.py: persistent dependency task graph
 - background.py: long-running background tasks and notifications
 - scheduler.py: cron-style scheduled prompts
+- team.py: persistent named teammates and inboxes
 - permissions.py: permission modes and rules
 - system_prompt.py: structured prompt assembly
 - hooks.py: workspace hook system
@@ -41,6 +42,7 @@ from easyclaude.scheduler import CronScheduler
 from easyclaude.skills import SkillRegistry
 from easyclaude.system_prompt import DYNAMIC_BOUNDARY, SystemPromptBuilder
 from easyclaude.task_graph import TaskManager
+from easyclaude.team import TeammateManager
 from easyclaude.todo import TodoManager
 from easyclaude.tools import TOOLS
 
@@ -62,6 +64,7 @@ def main() -> None:
     scheduler = CronScheduler()
     scheduler.start()
     atexit.register(scheduler.stop)
+    teammate_manager = TeammateManager()
     todo = TodoManager()
     perms = choose_permission_mode()
     hooks = HookManager()
@@ -81,6 +84,7 @@ def main() -> None:
         task_manager=task_manager,
         background_manager=background_manager,
         scheduler=scheduler,
+        teammate_manager=teammate_manager,
         perms=perms,
         hooks=hooks,
     )
@@ -125,6 +129,12 @@ def main() -> None:
             continue
         if query.strip() == "/cron":
             print(scheduler.list_tasks())
+            continue
+        if query.strip() == "/team":
+            print(teammate_manager.list_all())
+            continue
+        if query.strip() == "/inbox":
+            print(teammate_manager.format_inbox(teammate_manager.lead_inbox()) or "[]")
             continue
         if query.strip() == "/prompt":
             print("--- System Prompt ---")

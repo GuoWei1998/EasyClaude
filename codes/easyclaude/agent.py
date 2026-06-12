@@ -38,6 +38,7 @@ class AgentRuntime:
         task_manager,
         background_manager,
         scheduler,
+        teammate_manager,
         perms: PermissionManager,
         hooks,
     ):
@@ -46,10 +47,17 @@ class AgentRuntime:
         self.task_manager = task_manager
         self.background_manager = background_manager
         self.scheduler = scheduler
+        self.teammate_manager = teammate_manager
         self.perms = perms
         self.hooks = hooks
         self.tool_handlers = build_tool_handlers(
-            todo, skill_registry, memory_manager, task_manager, background_manager, scheduler
+            todo,
+            skill_registry,
+            memory_manager,
+            task_manager,
+            background_manager,
+            scheduler,
+            teammate_manager,
         )
         self.rounds_since_task_graph_update = 0
 
@@ -69,6 +77,15 @@ class AgentRuntime:
             return False
         messages.append({"role": "user", "content": content})
         print(f"[Cron] delivered {len(notifications)} scheduled task notification(s)")
+        return True
+
+    def inject_team_inbox(self, messages: list) -> bool:
+        inbox = self.teammate_manager.lead_inbox()
+        content = self.teammate_manager.format_inbox(inbox)
+        if not content:
+            return False
+        messages.append({"role": "user", "content": content})
+        print(f"[Team] delivered {len(inbox)} inbox message(s)")
         return True
 
     def run_subagent(self, prompt: str) -> str:
@@ -201,6 +218,7 @@ class AgentRuntime:
             state.messages[:] = compact_history(state.messages, compact_state)
         self.inject_background_notifications(state.messages)
         self.inject_scheduled_notifications(state.messages)
+        self.inject_team_inbox(state.messages)
 
         response = call_with_recovery(
             lambda: client.messages.create(

@@ -20,6 +20,7 @@ codes/
     task_graph.py         # Persistent dependency task graph
     background.py         # Long-running background tasks and notifications
     scheduler.py          # Cron-style scheduled prompts
+    team.py               # Persistent named teammates and inboxes
     system_prompt.py      # Structured system prompt assembly
     messages.py           # Message normalization helpers
     config.py             # Environment, client, workspace paths
@@ -47,6 +48,8 @@ Useful REPL commands:
 /tasks
 /background
 /cron
+/team
+/inbox
 q
 ```
 
@@ -57,4 +60,5 @@ Persistent local memories are written to `.memory/`.
 Persistent task graph records are written to `.tasks/`.
 Background task records and logs are written to `.runtime-tasks/`.
 Durable scheduled tasks are written to `.claude/scheduled_tasks.json`.
+Teammate registries and inboxes are written to `.team/`.
 Local secrets should stay in `codes/.env`.

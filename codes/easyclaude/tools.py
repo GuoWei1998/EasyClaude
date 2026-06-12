@@ -1,3 +1,4 @@
+import json
 import os
 import subprocess
 from pathlib import Path
@@ -225,6 +226,70 @@ TOOLS = [
         "input_schema": {"type": "object", "properties": {}},
     },
     {
+        "name": "spawn_teammate",
+        "description": "Spawn or restart a persistent named teammate that runs in its own thread.",
+        "input_schema": {
+            "type": "object",
+            "properties": {
+                "name": {"type": "string"},
+                "role": {"type": "string"},
+                "prompt": {"type": "string"},
+            },
+            "required": ["name", "role", "prompt"],
+        },
+    },
+    {
+        "name": "list_teammates",
+        "description": "List all persistent teammates with name, role, and status.",
+        "input_schema": {"type": "object", "properties": {}},
+    },
+    {
+        "name": "send_message",
+        "description": "Send a message to a teammate inbox.",
+        "input_schema": {
+            "type": "object",
+            "properties": {
+                "to": {"type": "string"},
+                "content": {"type": "string"},
+                "msg_type": {
+                    "type": "string",
+                    "enum": [
+                        "message",
+                        "broadcast",
+                        "shutdown_request",
+                        "shutdown_response",
+                        "plan_approval",
+                        "plan_approval_response",
+                    ],
+                },
+            },
+            "required": ["to", "content"],
+        },
+    },
+    {
+        "name": "read_inbox",
+        "description": "Read and drain the lead agent inbox.",
+        "input_schema": {"type": "object", "properties": {}},
+    },
+    {
+        "name": "broadcast",
+        "description": "Send a broadcast message to all teammates.",
+        "input_schema": {
+            "type": "object",
+            "properties": {"content": {"type": "string"}},
+            "required": ["content"],
+        },
+    },
+    {
+        "name": "shutdown_teammate",
+        "description": "Request a persistent teammate to stop and mark it shutdown.",
+        "input_schema": {
+            "type": "object",
+            "properties": {"name": {"type": "string"}},
+            "required": ["name"],
+        },
+    },
+    {
         "name": "task",
         "description": "Spawn a subagent with fresh context. It shares the filesystem but not conversation history.",
         "input_schema": {
@@ -287,6 +352,7 @@ def build_tool_handlers(
     task_manager,
     background_manager=None,
     scheduler=None,
+    teammate_manager=None,
 ):
     return {
         "bash": lambda **kw: run_bash(kw["command"]),
@@ -340,5 +406,35 @@ def build_tool_handlers(
             scheduler.list_tasks()
             if scheduler
             else "Error: scheduler is not configured"
+        ),
+        "spawn_teammate": lambda **kw: (
+            teammate_manager.spawn(kw["name"], kw["role"], kw["prompt"])
+            if teammate_manager
+            else "Error: teammate manager is not configured"
+        ),
+        "list_teammates": lambda **kw: (
+            teammate_manager.list_all()
+            if teammate_manager
+            else "Error: teammate manager is not configured"
+        ),
+        "send_message": lambda **kw: (
+            teammate_manager.bus.send("lead", kw["to"], kw["content"], kw.get("msg_type", "message"))
+            if teammate_manager
+            else "Error: teammate manager is not configured"
+        ),
+        "read_inbox": lambda **kw: (
+            json.dumps(teammate_manager.lead_inbox(), ensure_ascii=False, indent=2)
+            if teammate_manager
+            else "Error: teammate manager is not configured"
+        ),
+        "broadcast": lambda **kw: (
+            teammate_manager.bus.broadcast("lead", kw["content"], teammate_manager.member_names())
+            if teammate_manager
+            else "Error: teammate manager is not configured"
+        ),
+        "shutdown_teammate": lambda **kw: (
+            teammate_manager.shutdown(kw["name"])
+            if teammate_manager
+            else "Error: teammate manager is not configured"
         ),
     }
