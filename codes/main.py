@@ -136,6 +136,9 @@ def main() -> None:
         if query.strip() == "/inbox":
             print(teammate_manager.format_inbox(teammate_manager.lead_inbox()) or "[]")
             continue
+        if query.strip() == "/requests":
+            print(teammate_manager.list_requests())
+            continue
         if query.strip() == "/prompt":
             print("--- System Prompt ---")
             print(prompt_builder.build())

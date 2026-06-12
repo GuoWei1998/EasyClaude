@@ -14,6 +14,8 @@ READ_ONLY_TOOLS = {
     "cron_list",
     "list_teammates",
     "read_inbox",
+    "shutdown_response",
+    "list_team_requests",
 }
 TASK_GRAPH_TOOLS = {"task_create", "task_update", "task_list", "task_get"}
 WRITE_TOOLS = {
@@ -27,6 +29,8 @@ WRITE_TOOLS = {
     "send_message",
     "broadcast",
     "shutdown_teammate",
+    "shutdown_request",
+    "plan_approval",
 }
 
 
@@ -72,6 +76,8 @@ DEFAULT_RULES = [
     {"tool": "cron_list", "behavior": "allow"},
     {"tool": "list_teammates", "behavior": "allow"},
     {"tool": "read_inbox", "behavior": "allow"},
+    {"tool": "shutdown_response", "behavior": "allow"},
+    {"tool": "list_team_requests", "behavior": "allow"},
     {"tool": "task_create", "behavior": "allow"},
     {"tool": "task_update", "behavior": "allow"},
     {"tool": "task_list", "behavior": "allow"},

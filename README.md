@@ -50,6 +50,7 @@ Useful REPL commands:
 /cron
 /team
 /inbox
+/requests
 q
 ```
 

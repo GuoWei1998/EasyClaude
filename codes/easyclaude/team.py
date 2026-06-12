@@ -1,6 +1,7 @@
 import json
 import threading
 import time
+import uuid
 from pathlib import Path
 
 from .config import MODEL, WORKDIR, client
@@ -10,6 +11,7 @@ from .tools import run_bash, run_edit, run_read, run_write
 TEAM_DIR = WORKDIR / ".team"
 INBOX_DIR = TEAM_DIR / "inbox"
 TEAM_CONFIG_FILE = TEAM_DIR / "config.json"
+REQUESTS_DIR = TEAM_DIR / "requests"
 VALID_MSG_TYPES = {
     "message",
     "broadcast",
@@ -83,14 +85,69 @@ class MessageBus:
         return f"Broadcast to {count} teammate(s)"
 
 
+class RequestStore:
+    """Durable request records for team protocols."""
+
+    def __init__(self, requests_dir: Path = None):
+        self.dir = requests_dir or REQUESTS_DIR
+        self.dir.mkdir(parents=True, exist_ok=True)
+        self._lock = threading.Lock()
+
+    def create(self, record: dict) -> dict:
+        request_id = record["request_id"]
+        with self._lock:
+            self._path(request_id).write_text(json.dumps(record, ensure_ascii=False, indent=2))
+        return record
+
+    def get(self, request_id: str) -> dict | None:
+        path = self._path(request_id)
+        if not path.exists():
+            return None
+        try:
+            return json.loads(path.read_text())
+        except json.JSONDecodeError:
+            return None
+
+    def update(self, request_id: str, **changes) -> dict | None:
+        with self._lock:
+            record = self.get(request_id)
+            if not record:
+                return None
+            record.update(changes)
+            record["updated_at"] = time.time()
+            self._path(request_id).write_text(json.dumps(record, ensure_ascii=False, indent=2))
+            return record
+
+    def list_all(self) -> str:
+        records = []
+        for path in sorted(self.dir.glob("*.json")):
+            try:
+                records.append(json.loads(path.read_text()))
+            except json.JSONDecodeError:
+                continue
+        if not records:
+            return "No protocol requests."
+        lines = []
+        for record in records:
+            lines.append(
+                f"{record.get('request_id')} [{record.get('kind')}/{record.get('status')}] "
+                f"{record.get('from')} -> {record.get('to')}"
+            )
+        return "\n".join(lines)
+
+    def _path(self, request_id: str) -> Path:
+        return self.dir / f"{request_id}.json"
+
+
 class TeammateManager:
     """Persistent teammate registry plus worker-thread launcher."""
 
-    def __init__(self, team_dir: Path = None, bus: MessageBus = None):
+    def __init__(self, team_dir: Path = None, bus: MessageBus = None, request_store: RequestStore = None):
         self.dir = team_dir or TEAM_DIR
         self.dir.mkdir(parents=True, exist_ok=True)
         self.config_path = self.dir / "config.json"
         self.bus = bus or MessageBus(self.dir / "inbox")
+        self.request_store = request_store or RequestStore(self.dir / "requests")
         self.config = self._load_config()
         self.threads = {}
         self.stop_events = {}
@@ -135,6 +192,62 @@ class TeammateManager:
             self._save_config()
         return f"Shutdown requested for teammate '{name}'"
 
+    def request_shutdown(self, teammate: str) -> str:
+        if not self._find_member(teammate):
+            return f"Teammate not found: {teammate}"
+        request_id = f"req_{uuid.uuid4().hex[:8]}"
+        self.request_store.create(
+            {
+                "request_id": request_id,
+                "kind": "shutdown",
+                "from": "lead",
+                "to": teammate,
+                "status": "pending",
+                "created_at": time.time(),
+                "updated_at": time.time(),
+            }
+        )
+        self.bus.send(
+            "lead",
+            teammate,
+            "Please shut down gracefully. Reply with shutdown_response.",
+            "shutdown_request",
+            {"request_id": request_id},
+        )
+        return f"Shutdown request {request_id} sent to '{teammate}' (status: pending)"
+
+    def review_plan(self, request_id: str, approve: bool, feedback: str = "") -> str:
+        request = self.request_store.get(request_id)
+        if not request:
+            return f"Error: Unknown plan request_id '{request_id}'"
+        if request.get("kind") != "plan_approval":
+            return f"Error: Request {request_id} is not a plan approval request"
+        status = "approved" if approve else "rejected"
+        self.request_store.update(
+            request_id,
+            status=status,
+            reviewed_by="lead",
+            resolved_at=time.time(),
+            feedback=feedback,
+        )
+        self.bus.send(
+            "lead",
+            request["from"],
+            feedback,
+            "plan_approval_response",
+            {"request_id": request_id, "approve": approve, "feedback": feedback},
+        )
+        return f"Plan {status} for '{request['from']}'"
+
+    def check_request(self, request_id: str) -> str:
+        record = self.request_store.get(request_id)
+        if not record:
+            return json.dumps({"error": "not found", "request_id": request_id}, ensure_ascii=False)
+        return json.dumps(record, ensure_ascii=False, indent=2)
+
+    def list_requests(self) -> str:
+        return self.request_store.list_all()
+
     def list_all(self) -> str:
         if not self.config["members"]:
             return "No teammates."
@@ -158,12 +271,15 @@ class TeammateManager:
         system = (
             f"You are '{name}', a persistent teammate with role '{role}' at {WORKDIR}. "
             "Use send_message to report findings to lead or coordinate with teammates. "
+            "Submit plans with plan_approval before major work. "
+            "Respond to shutdown_request messages with shutdown_response. "
             "When you have no immediate work, provide a short status update."
         )
         messages = [{"role": "user", "content": prompt}]
         turns = 0
+        should_exit = False
         try:
-            while not stop_event.is_set() and turns < TEAMMATE_MAX_MODEL_TURNS:
+            while not stop_event.is_set() and not should_exit and turns < TEAMMATE_MAX_MODEL_TURNS:
                 inbox = self.bus.read_inbox(name)
                 for item in inbox:
                     messages.append({"role": "user", "content": self.format_inbox([item])})
@@ -199,13 +315,15 @@ class TeammateManager:
                             "content": str(output)[:50000],
                         }
                     )
+                    if block.name == "shutdown_response" and dict(block.input or {}).get("approve"):
+                        should_exit = True
                 if results:
                     messages.append({"role": "user", "content": results})
         except Exception as exc:
             self.bus.send(name, "lead", f"Teammate error: {exc}")
             self._set_status(name, "error")
             return
-        self._set_status(name, "shutdown" if stop_event.is_set() else "idle")
+        self._set_status(name, "shutdown" if stop_event.is_set() or should_exit else "idle")
 
     def _exec(self, sender: str, tool_name: str, args: dict) -> str:
         if tool_name == "bash":
@@ -220,6 +338,50 @@ class TeammateManager:
             return self.bus.send(sender, args["to"], args["content"], args.get("msg_type", "message"))
         if tool_name == "read_inbox":
             return json.dumps(self.bus.read_inbox(sender), ensure_ascii=False, indent=2)
+        if tool_name == "shutdown_response":
+            request_id = args["request_id"]
+            approve = bool(args["approve"])
+            status = "approved" if approve else "rejected"
+            updated = self.request_store.update(
+                request_id,
+                status=status,
+                resolved_by=sender,
+                resolved_at=time.time(),
+                response={"approve": approve, "reason": args.get("reason", "")},
+            )
+            if not updated:
+                return f"Error: Unknown shutdown request {request_id}"
+            self.bus.send(
+                sender,
+                "lead",
+                args.get("reason", ""),
+                "shutdown_response",
+                {"request_id": request_id, "approve": approve},
+            )
+            return f"Shutdown {status}"
+        if tool_name == "plan_approval":
+            request_id = f"req_{uuid.uuid4().hex[:8]}"
+            plan = args["plan"]
+            self.request_store.create(
+                {
+                    "request_id": request_id,
+                    "kind": "plan_approval",
+                    "from": sender,
+                    "to": "lead",
+                    "status": "pending",
+                    "plan": plan,
+                    "created_at": time.time(),
+                    "updated_at": time.time(),
+                }
+            )
+            self.bus.send(
+                sender,
+                "lead",
+                plan,
+                "plan_approval",
+                {"request_id": request_id, "plan": plan},
+            )
+            return f"Plan submitted (request_id={request_id}). Waiting for lead approval."
         return f"Unknown tool: {tool_name}"
 
     def _teammate_tools(self) -> list[dict]:
@@ -281,6 +443,28 @@ class TeammateManager:
                 "name": "read_inbox",
                 "description": "Read and drain your inbox.",
                 "input_schema": {"type": "object", "properties": {}},
+            },
+            {
+                "name": "shutdown_response",
+                "description": "Respond to a shutdown request. Approve to shut down, reject to keep working.",
+                "input_schema": {
+                    "type": "object",
+                    "properties": {
+                        "request_id": {"type": "string"},
+                        "approve": {"type": "boolean"},
+                        "reason": {"type": "string"},
+                    },
+                    "required": ["request_id", "approve"],
+                },
+            },
+            {
+                "name": "plan_approval",
+                "description": "Submit a plan for lead approval before major work.",
+                "input_schema": {
+                    "type": "object",
+                    "properties": {"plan": {"type": "string"}},
+                    "required": ["plan"],
+                },
             },
         ]
 

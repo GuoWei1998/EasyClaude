@@ -290,6 +290,42 @@ TOOLS = [
         },
     },
     {
+        "name": "shutdown_request",
+        "description": "Start the graceful shutdown protocol for a teammate. Returns a request_id.",
+        "input_schema": {
+            "type": "object",
+            "properties": {"teammate": {"type": "string"}},
+            "required": ["teammate"],
+        },
+    },
+    {
+        "name": "shutdown_response",
+        "description": "Check the durable status of a shutdown protocol request by request_id.",
+        "input_schema": {
+            "type": "object",
+            "properties": {"request_id": {"type": "string"}},
+            "required": ["request_id"],
+        },
+    },
+    {
+        "name": "plan_approval",
+        "description": "Approve or reject a teammate's submitted plan by request_id.",
+        "input_schema": {
+            "type": "object",
+            "properties": {
+                "request_id": {"type": "string"},
+                "approve": {"type": "boolean"},
+                "feedback": {"type": "string"},
+            },
+            "required": ["request_id", "approve"],
+        },
+    },
+    {
+        "name": "list_team_requests",
+        "description": "List durable team protocol requests.",
+        "input_schema": {"type": "object", "properties": {}},
+    },
+    {
         "name": "task",
         "description": "Spawn a subagent with fresh context. It shares the filesystem but not conversation history.",
         "input_schema": {
@@ -434,6 +470,26 @@ def build_tool_handlers(
         ),
         "shutdown_teammate": lambda **kw: (
             teammate_manager.shutdown(kw["name"])
+            if teammate_manager
+            else "Error: teammate manager is not configured"
+        ),
+        "shutdown_request": lambda **kw: (
+            teammate_manager.request_shutdown(kw["teammate"])
+            if teammate_manager
+            else "Error: teammate manager is not configured"
+        ),
+        "shutdown_response": lambda **kw: (
+            teammate_manager.check_request(kw["request_id"])
+            if teammate_manager
+            else "Error: teammate manager is not configured"
+        ),
+        "plan_approval": lambda **kw: (
+            teammate_manager.review_plan(kw["request_id"], kw["approve"], kw.get("feedback", ""))
+            if teammate_manager
+            else "Error: teammate manager is not configured"
+        ),
+        "list_team_requests": lambda **kw: (
+            teammate_manager.list_requests()
             if teammate_manager
             else "Error: teammate manager is not configured"
         ),
