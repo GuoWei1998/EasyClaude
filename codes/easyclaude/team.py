@@ -164,6 +164,7 @@ class TeammateManager:
         bus: MessageBus = None,
         request_store: RequestStore = None,
         task_manager: TaskManager = None,
+        worktree_manager=None,
         idle_poll_seconds: int = TEAMMATE_IDLE_POLL_SECONDS,
         idle_timeout_seconds: int = TEAMMATE_IDLE_TIMEOUT_SECONDS,
     ):
@@ -173,11 +174,13 @@ class TeammateManager:
         self.bus = bus or MessageBus(self.dir / "inbox")
         self.request_store = request_store or RequestStore(self.dir / "requests")
         self.task_manager = task_manager or TaskManager()
+        self.worktree_manager = worktree_manager
         self.idle_poll_seconds = idle_poll_seconds
         self.idle_timeout_seconds = idle_timeout_seconds
         self.config = self._load_config()
         self.threads = {}
         self.stop_events = {}
+        self.worktree_context = {}
         self._lock = threading.Lock()
 
     def spawn(self, name: str, role: str, prompt: str) -> str:
@@ -377,13 +380,17 @@ class TeammateManager:
 
             task, claim_result = self.task_manager.claim_first(name, role=role, source="auto")
             if task:
+                self._set_worktree_context(name, task.get("worktree"))
                 ensure_identity_context(messages, name, role, team_name)
+                worktree_note = ""
+                if task.get("worktree"):
+                    worktree_note = f"\nWork directory: {self._worktree_path(task['worktree'])}"
                 messages.append(
                     {
                         "role": "user",
                         "content": (
                             f"<auto-claimed>Task #{task['id']}: {task['subject']}\n"
-                            f"{task.get('description', '')}</auto-claimed>"
+                            f"{task.get('description', '')}{worktree_note}</auto-claimed>"
                         ),
                     }
                 )
@@ -394,13 +401,13 @@ class TeammateManager:
 
     def _exec(self, sender: str, tool_name: str, args: dict) -> str:
         if tool_name == "bash":
-            return run_bash(args["command"])
+            return run_bash(args["command"], cwd=self._work_cwd(sender))
         if tool_name == "read_file":
-            return run_read(args["path"], args.get("limit"))
+            return run_read(args["path"], args.get("limit"), cwd=self._work_cwd(sender))
         if tool_name == "write_file":
-            return run_write(args["path"], args["content"])
+            return run_write(args["path"], args["content"], cwd=self._work_cwd(sender))
         if tool_name == "edit_file":
-            return run_edit(args["path"], args["old_text"], args["new_text"])
+            return run_edit(args["path"], args["old_text"], args["new_text"], cwd=self._work_cwd(sender))
         if tool_name == "send_message":
             return self.bus.send(sender, args["to"], args["content"], args.get("msg_type", "message"))
         if tool_name == "read_inbox":
@@ -452,8 +459,34 @@ class TeammateManager:
         if tool_name == "claim_task":
             member = self._find_member(sender)
             role = member.get("role") if member else None
-            return self.task_manager.claim(args["task_id"], sender, role=role, source="manual")
+            result = self.task_manager.claim(args["task_id"], sender, role=role, source="manual")
+            if not result.startswith("Error:"):
+                task = json.loads(self.task_manager.get(args["task_id"]))
+                self._set_worktree_context(sender, task.get("worktree"))
+            return result
+        if tool_name == "complete_task":
+            result = self.task_manager.update(args["task_id"], status="completed")
+            self._set_worktree_context(sender, None)
+            return result
         return f"Unknown tool: {tool_name}"
+
+    def _set_worktree_context(self, name: str, worktree: str | None) -> None:
+        if worktree:
+            self.worktree_context[name] = worktree
+        else:
+            self.worktree_context.pop(name, None)
+
+    def _worktree_path(self, worktree: str) -> Path:
+        if self.worktree_manager:
+            return self.worktree_manager.path_for(worktree)
+        return WORKDIR / ".worktrees" / worktree
+
+    def _work_cwd(self, name: str) -> Path | None:
+        worktree = self.worktree_context.get(name)
+        if not worktree:
+            return None
+        path = self._worktree_path(worktree)
+        return path if path.exists() else None
 
     def _teammate_tools(self) -> list[dict]:
         return [
@@ -545,6 +578,15 @@ class TeammateManager:
             {
                 "name": "claim_task",
                 "description": "Claim a ready task from the task graph by ID.",
+                "input_schema": {
+                    "type": "object",
+                    "properties": {"task_id": {"type": "integer"}},
+                    "required": ["task_id"],
+                },
+            },
+            {
+                "name": "complete_task",
+                "description": "Mark an in-progress task as completed and leave its worktree context.",
                 "input_schema": {
                     "type": "object",
                     "properties": {"task_id": {"type": "integer"}},

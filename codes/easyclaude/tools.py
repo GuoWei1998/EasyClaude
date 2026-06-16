@@ -9,14 +9,15 @@ CONCURRENCY_SAFE = {"read_file"}
 CONCURRENCY_UNSAFE = {"write_file", "edit_file"}
 
 
-def safe_path(p: str) -> Path:
-    path = (WORKDIR / p).resolve()
-    if not path.is_relative_to(WORKDIR):
+def safe_path(p: str, cwd: Path = None) -> Path:
+    base = (cwd or WORKDIR).resolve()
+    path = (base / p).resolve()
+    if not path.is_relative_to(base):
         raise ValueError(f"Path escapes workspace: {p}")
     return path
 
 
-def run_bash(command: str) -> str:
+def run_bash(command: str, cwd: Path = None) -> str:
     dangerous = ["rm -rf /", "sudo", "shutdown", "reboot", "> /dev/"]
     if any(item in command for item in dangerous):
         return "Error: Dangerous command blocked"
@@ -24,7 +25,7 @@ def run_bash(command: str) -> str:
         result = subprocess.run(
             command,
             shell=True,
-            cwd=os.getcwd(),
+            cwd=cwd or os.getcwd(),
             capture_output=True,
             text=True,
             timeout=120,
@@ -37,9 +38,9 @@ def run_bash(command: str) -> str:
     return output[:50000] if output else "(no output)"
 
 
-def run_read(path: str, limit: int = None) -> str:
+def run_read(path: str, limit: int = None, cwd: Path = None) -> str:
     try:
-        text = safe_path(path).read_text()
+        text = safe_path(path, cwd).read_text()
         lines = text.splitlines()
         if limit and limit < len(lines):
             lines = lines[:limit] + [f"... ({len(lines) - limit} more lines)"]
@@ -48,9 +49,9 @@ def run_read(path: str, limit: int = None) -> str:
         return f"Error: {e}"
 
 
-def run_write(path: str, content: str) -> str:
+def run_write(path: str, content: str, cwd: Path = None) -> str:
     try:
-        fp = safe_path(path)
+        fp = safe_path(path, cwd)
         fp.parent.mkdir(parents=True, exist_ok=True)
         fp.write_text(content)
         return f"Wrote {len(content)} bytes to {path}"
@@ -58,9 +59,9 @@ def run_write(path: str, content: str) -> str:
         return f"Error: {e}"
 
 
-def run_edit(path: str, old_text: str, new_text: str) -> str:
+def run_edit(path: str, old_text: str, new_text: str, cwd: Path = None) -> str:
     try:
-        fp = safe_path(path)
+        fp = safe_path(path, cwd)
         content = fp.read_text()
         if old_text not in content:
             return f"Error: Text not found in {path}"
@@ -188,6 +189,56 @@ TOOLS = [
             },
             "required": ["task_id", "owner"],
         },
+    },
+    {
+        "name": "create_worktree",
+        "description": "Create an isolated git worktree with branch wt/<name>, optionally bound to a task.",
+        "input_schema": {
+            "type": "object",
+            "properties": {
+                "name": {"type": "string"},
+                "task_id": {"type": "integer"},
+            },
+            "required": ["name"],
+        },
+    },
+    {
+        "name": "bind_worktree",
+        "description": "Bind an existing worktree name to a task without changing task status.",
+        "input_schema": {
+            "type": "object",
+            "properties": {
+                "task_id": {"type": "integer"},
+                "name": {"type": "string"},
+            },
+            "required": ["task_id", "name"],
+        },
+    },
+    {
+        "name": "remove_worktree",
+        "description": "Remove a worktree. Refuses if uncommitted changes exist unless discard_changes is true.",
+        "input_schema": {
+            "type": "object",
+            "properties": {
+                "name": {"type": "string"},
+                "discard_changes": {"type": "boolean"},
+            },
+            "required": ["name"],
+        },
+    },
+    {
+        "name": "keep_worktree",
+        "description": "Record that a worktree should be kept for manual review.",
+        "input_schema": {
+            "type": "object",
+            "properties": {"name": {"type": "string"}},
+            "required": ["name"],
+        },
+    },
+    {
+        "name": "list_worktrees",
+        "description": "List isolated worktrees under .worktrees.",
+        "input_schema": {"type": "object", "properties": {}},
     },
     {
         "name": "background_run",
@@ -410,6 +461,7 @@ def build_tool_handlers(
     background_manager=None,
     scheduler=None,
     teammate_manager=None,
+    worktree_manager=None,
 ):
     return {
         "bash": lambda **kw: run_bash(kw["command"]),
@@ -439,6 +491,31 @@ def build_tool_handlers(
         ),
         "task_claim": lambda **kw: task_manager.claim(
             kw["task_id"], kw["owner"], kw.get("role"), source="manual"
+        ),
+        "create_worktree": lambda **kw: (
+            worktree_manager.create(kw["name"], kw.get("task_id"))
+            if worktree_manager
+            else "Error: worktree manager is not configured"
+        ),
+        "bind_worktree": lambda **kw: (
+            worktree_manager.bind_task(kw["task_id"], kw["name"])
+            if worktree_manager
+            else "Error: worktree manager is not configured"
+        ),
+        "remove_worktree": lambda **kw: (
+            worktree_manager.remove(kw["name"], kw.get("discard_changes", False))
+            if worktree_manager
+            else "Error: worktree manager is not configured"
+        ),
+        "keep_worktree": lambda **kw: (
+            worktree_manager.keep(kw["name"])
+            if worktree_manager
+            else "Error: worktree manager is not configured"
+        ),
+        "list_worktrees": lambda **kw: (
+            worktree_manager.list_all()
+            if worktree_manager
+            else "Error: worktree manager is not configured"
         ),
         "background_run": lambda **kw: (
             background_manager.run(kw["command"])

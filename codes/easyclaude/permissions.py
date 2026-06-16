@@ -17,6 +17,7 @@ READ_ONLY_TOOLS = {
     "read_inbox",
     "shutdown_response",
     "list_team_requests",
+    "list_worktrees",
 }
 TASK_GRAPH_TOOLS = {"task_create", "task_update", "task_list", "task_get", "task_unclaimed", "task_claim"}
 WRITE_TOOLS = {
@@ -33,6 +34,10 @@ WRITE_TOOLS = {
     "shutdown_request",
     "plan_approval",
     "task_claim",
+    "create_worktree",
+    "bind_worktree",
+    "remove_worktree",
+    "keep_worktree",
 }
 
 
@@ -80,6 +85,7 @@ DEFAULT_RULES = [
     {"tool": "read_inbox", "behavior": "allow"},
     {"tool": "shutdown_response", "behavior": "allow"},
     {"tool": "list_team_requests", "behavior": "allow"},
+    {"tool": "list_worktrees", "behavior": "allow"},
     {"tool": "task_create", "behavior": "allow"},
     {"tool": "task_update", "behavior": "allow"},
     {"tool": "task_list", "behavior": "allow"},

@@ -62,6 +62,7 @@ class TaskManager:
             "blockedBy": [],
             "blocks": [],
             "owner": owner,
+            "worktree": None,
         }
         self._save(task)
         self._next_id += 1
@@ -142,7 +143,8 @@ class TaskManager:
             blocked = f" blockedBy={task['blockedBy']}" if task.get("blockedBy") else ""
             blocks = f" blocks={task['blocks']}" if task.get("blocks") else ""
             owner = f" owner={task['owner']}" if task.get("owner") else ""
-            lines.append(f"{marker} #{task['id']}: {task['subject']}{owner}{blocked}{blocks}")
+            worktree = f" wt:{task['worktree']}" if task.get("worktree") else ""
+            lines.append(f"{marker} #{task['id']}: {task['subject']}{owner}{blocked}{blocks}{worktree}")
         ready = self.ready_ids()
         if ready:
             lines.append(f"\nReady: {ready}")
@@ -192,6 +194,12 @@ class TaskManager:
             if not result.startswith("Error:"):
                 return self._load(task["id"]), result
         return None, "No claimable tasks."
+
+    def bind_worktree(self, task_id: int, worktree: str) -> str:
+        task = self._load(task_id)
+        task["worktree"] = worktree
+        self._save(task)
+        return json.dumps(task, indent=2, ensure_ascii=False)
 
     def is_claimable(self, task: dict, role: str = None) -> bool:
         return (

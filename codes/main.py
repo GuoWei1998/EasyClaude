@@ -13,6 +13,7 @@ The implementation is split into small modules under easyclaude/:
 - background.py: long-running background tasks and notifications
 - scheduler.py: cron-style scheduled prompts
 - team.py: persistent named teammates and inboxes
+- worktree.py: git worktree isolation for task work
 - permissions.py: permission modes and rules
 - system_prompt.py: structured prompt assembly
 - hooks.py: workspace hook system
@@ -45,6 +46,7 @@ from easyclaude.task_graph import TaskManager
 from easyclaude.team import TeammateManager
 from easyclaude.todo import TodoManager
 from easyclaude.tools import TOOLS
+from easyclaude.worktree import WorktreeManager
 
 
 def choose_permission_mode() -> PermissionManager:
@@ -64,7 +66,8 @@ def main() -> None:
     scheduler = CronScheduler()
     scheduler.start()
     atexit.register(scheduler.stop)
-    teammate_manager = TeammateManager(task_manager=task_manager)
+    worktree_manager = WorktreeManager(task_manager=task_manager)
+    teammate_manager = TeammateManager(task_manager=task_manager, worktree_manager=worktree_manager)
     todo = TodoManager()
     perms = choose_permission_mode()
     hooks = HookManager()
@@ -85,6 +88,7 @@ def main() -> None:
         background_manager=background_manager,
         scheduler=scheduler,
         teammate_manager=teammate_manager,
+        worktree_manager=worktree_manager,
         perms=perms,
         hooks=hooks,
     )
@@ -138,6 +142,9 @@ def main() -> None:
             continue
         if query.strip() == "/requests":
             print(teammate_manager.list_requests())
+            continue
+        if query.strip() == "/worktrees":
+            print(worktree_manager.list_all())
             continue
         if query.strip() == "/prompt":
             print("--- System Prompt ---")
