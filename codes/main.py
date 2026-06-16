@@ -64,7 +64,7 @@ def main() -> None:
     scheduler = CronScheduler()
     scheduler.start()
     atexit.register(scheduler.stop)
-    teammate_manager = TeammateManager()
+    teammate_manager = TeammateManager(task_manager=task_manager)
     todo = TodoManager()
     perms = choose_permission_mode()
     hooks = HookManager()

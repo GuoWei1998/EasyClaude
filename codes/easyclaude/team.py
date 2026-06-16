@@ -5,6 +5,7 @@ import uuid
 from pathlib import Path
 
 from .config import MODEL, WORKDIR, client
+from .task_graph import TaskManager
 from .tools import run_bash, run_edit, run_read, run_write
 
 
@@ -21,6 +22,7 @@ VALID_MSG_TYPES = {
     "plan_approval_response",
 }
 TEAMMATE_IDLE_POLL_SECONDS = 1
+TEAMMATE_IDLE_TIMEOUT_SECONDS = 60
 TEAMMATE_MAX_MODEL_TURNS = 50
 
 
@@ -139,15 +141,40 @@ class RequestStore:
         return self.dir / f"{request_id}.json"
 
 
+def make_identity_block(name: str, role: str, team_name: str) -> dict:
+    return {
+        "role": "user",
+        "content": f"<identity>You are '{name}', role: {role}, team: {team_name}. Continue your work.</identity>",
+    }
+
+
+def ensure_identity_context(messages: list, name: str, role: str, team_name: str) -> None:
+    if messages and "<identity>" in str(messages[0].get("content", "")):
+        return
+    messages.insert(0, make_identity_block(name, role, team_name))
+    messages.insert(1, {"role": "assistant", "content": f"I am {name}. Continuing."})
+
+
 class TeammateManager:
     """Persistent teammate registry plus worker-thread launcher."""
 
-    def __init__(self, team_dir: Path = None, bus: MessageBus = None, request_store: RequestStore = None):
+    def __init__(
+        self,
+        team_dir: Path = None,
+        bus: MessageBus = None,
+        request_store: RequestStore = None,
+        task_manager: TaskManager = None,
+        idle_poll_seconds: int = TEAMMATE_IDLE_POLL_SECONDS,
+        idle_timeout_seconds: int = TEAMMATE_IDLE_TIMEOUT_SECONDS,
+    ):
         self.dir = team_dir or TEAM_DIR
         self.dir.mkdir(parents=True, exist_ok=True)
         self.config_path = self.dir / "config.json"
         self.bus = bus or MessageBus(self.dir / "inbox")
         self.request_store = request_store or RequestStore(self.dir / "requests")
+        self.task_manager = task_manager or TaskManager()
+        self.idle_poll_seconds = idle_poll_seconds
+        self.idle_timeout_seconds = idle_timeout_seconds
         self.config = self._load_config()
         self.threads = {}
         self.stop_events = {}
@@ -273,7 +300,7 @@ class TeammateManager:
             "Use send_message to report findings to lead or coordinate with teammates. "
             "Submit plans with plan_approval before major work. "
             "Respond to shutdown_request messages with shutdown_response. "
-            "When you have no immediate work, provide a short status update."
+            "Use idle when you have no more immediate work; idle mode will poll inboxes and auto-claim ready tasks."
         )
         messages = [{"role": "user", "content": prompt}]
         turns = 0
@@ -283,10 +310,9 @@ class TeammateManager:
                 inbox = self.bus.read_inbox(name)
                 for item in inbox:
                     messages.append({"role": "user", "content": self.format_inbox([item])})
-                if turns > 0 and not inbox:
-                    self._set_status(name, "idle")
-                    stop_event.wait(timeout=TEAMMATE_IDLE_POLL_SECONDS)
-                    continue
+                if turns > 0 and not inbox and not self._resume_from_idle(name, role, messages, stop_event):
+                    self._set_status(name, "shutdown")
+                    return
 
                 self._set_status(name, "working")
                 response = client.messages.create(
@@ -303,10 +329,15 @@ class TeammateManager:
                     continue
 
                 results = []
+                should_idle = False
                 for block in response.content:
                     if block.type != "tool_use":
                         continue
-                    output = self._exec(name, block.name, dict(block.input or {}))
+                    if block.name == "idle":
+                        output = "Entering idle phase. Will poll inboxes and auto-claim ready tasks."
+                        should_idle = True
+                    else:
+                        output = self._exec(name, block.name, dict(block.input or {}))
                     print(f"  [{name}] {block.name}: {str(output)[:120]}")
                     results.append(
                         {
@@ -319,11 +350,47 @@ class TeammateManager:
                         should_exit = True
                 if results:
                     messages.append({"role": "user", "content": results})
+                if should_idle:
+                    continue
         except Exception as exc:
             self.bus.send(name, "lead", f"Teammate error: {exc}")
             self._set_status(name, "error")
             return
         self._set_status(name, "shutdown" if stop_event.is_set() or should_exit else "idle")
+
+    def _resume_from_idle(self, name: str, role: str, messages: list, stop_event: threading.Event) -> bool:
+        team_name = self.config.get("team_name", "default")
+        self._set_status(name, "idle")
+        polls = max(1, self.idle_timeout_seconds // max(self.idle_poll_seconds, 1))
+        for _ in range(polls):
+            if stop_event.wait(timeout=self.idle_poll_seconds):
+                return False
+            inbox = self.bus.read_inbox(name)
+            if inbox:
+                ensure_identity_context(messages, name, role, team_name)
+                for item in inbox:
+                    if item.get("type") == "shutdown_request":
+                        messages.append({"role": "user", "content": self.format_inbox([item])})
+                    else:
+                        messages.append({"role": "user", "content": self.format_inbox([item])})
+                return True
+
+            task, claim_result = self.task_manager.claim_first(name, role=role, source="auto")
+            if task:
+                ensure_identity_context(messages, name, role, team_name)
+                messages.append(
+                    {
+                        "role": "user",
+                        "content": (
+                            f"<auto-claimed>Task #{task['id']}: {task['subject']}\n"
+                            f"{task.get('description', '')}</auto-claimed>"
+                        ),
+                    }
+                )
+                messages.append({"role": "assistant", "content": f"{claim_result}. Working on it."})
+                self._set_status(name, "working")
+                return True
+        return False
 
     def _exec(self, sender: str, tool_name: str, args: dict) -> str:
         if tool_name == "bash":
@@ -382,6 +449,10 @@ class TeammateManager:
                 {"request_id": request_id, "plan": plan},
             )
             return f"Plan submitted (request_id={request_id}). Waiting for lead approval."
+        if tool_name == "claim_task":
+            member = self._find_member(sender)
+            role = member.get("role") if member else None
+            return self.task_manager.claim(args["task_id"], sender, role=role, source="manual")
         return f"Unknown tool: {tool_name}"
 
     def _teammate_tools(self) -> list[dict]:
@@ -464,6 +535,20 @@ class TeammateManager:
                     "type": "object",
                     "properties": {"plan": {"type": "string"}},
                     "required": ["plan"],
+                },
+            },
+            {
+                "name": "idle",
+                "description": "Signal that you have no more immediate work and should enter idle polling.",
+                "input_schema": {"type": "object", "properties": {}},
+            },
+            {
+                "name": "claim_task",
+                "description": "Claim a ready task from the task graph by ID.",
+                "input_schema": {
+                    "type": "object",
+                    "properties": {"task_id": {"type": "integer"}},
+                    "required": ["task_id"],
                 },
             },
         ]

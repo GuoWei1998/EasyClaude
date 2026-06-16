@@ -169,6 +169,27 @@ TOOLS = [
         },
     },
     {
+        "name": "task_unclaimed",
+        "description": "List claimable pending task graph nodes, optionally filtered by teammate role.",
+        "input_schema": {
+            "type": "object",
+            "properties": {"role": {"type": "string"}},
+        },
+    },
+    {
+        "name": "task_claim",
+        "description": "Claim a pending unowned task for an owner.",
+        "input_schema": {
+            "type": "object",
+            "properties": {
+                "task_id": {"type": "integer"},
+                "owner": {"type": "string"},
+                "role": {"type": "string"},
+            },
+            "required": ["task_id", "owner"],
+        },
+    },
+    {
         "name": "background_run",
         "description": "Run a long-running shell command in the background and return a task id immediately.",
         "input_schema": {
@@ -413,6 +434,12 @@ def build_tool_handlers(
         ),
         "task_list": lambda **kw: task_manager.list_all(),
         "task_get": lambda **kw: task_manager.get(kw["task_id"]),
+        "task_unclaimed": lambda **kw: json.dumps(
+            task_manager.unclaimed(kw.get("role")), ensure_ascii=False, indent=2
+        ),
+        "task_claim": lambda **kw: task_manager.claim(
+            kw["task_id"], kw["owner"], kw.get("role"), source="manual"
+        ),
         "background_run": lambda **kw: (
             background_manager.run(kw["command"])
             if background_manager

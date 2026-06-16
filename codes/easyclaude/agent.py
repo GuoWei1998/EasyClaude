@@ -196,7 +196,7 @@ class AgentRuntime:
                 "tool_use_id": block.id,
                 "content": content,
             })
-            if block.name in {"task_create", "task_update", "task_list", "task_get"}:
+            if block.name in {"task_create", "task_update", "task_list", "task_get", "task_unclaimed", "task_claim"}:
                 used_task_graph = True
             print(block.name, "\n")
 

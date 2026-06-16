@@ -1,4 +1,6 @@
 import json
+import threading
+import time
 from pathlib import Path
 
 from .config import WORKDIR
@@ -7,6 +9,7 @@ from .config import WORKDIR
 TASKS_DIR = WORKDIR / ".tasks"
 TASK_STATUSES = ("pending", "in_progress", "completed", "deleted")
 TASK_REMINDER_INTERVAL = 3
+_claim_lock = threading.Lock()
 
 
 class TaskManager:
@@ -155,6 +158,49 @@ class TaskManager:
             ready.append(task["id"])
         return ready
 
+    def unclaimed(self, role: str = None) -> list[dict]:
+        return [
+            task for task in self._all_tasks()
+            if self.is_claimable(task, role)
+        ]
+
+    def claim(self, task_id: int, owner: str, role: str = None, source: str = "manual") -> str:
+        with _claim_lock:
+            task = self._load(task_id)
+            if not self.is_claimable(task, role):
+                return f"Error: Task {task_id} is not claimable for role={role or '(any)'}"
+            task["owner"] = owner
+            task["status"] = "in_progress"
+            task["claimed_at"] = time.time()
+            task["claim_source"] = source
+            self._save(task)
+        self._append_claim_event(
+            {
+                "event": "task.claimed",
+                "task_id": task_id,
+                "owner": owner,
+                "role": role,
+                "source": source,
+                "ts": time.time(),
+            }
+        )
+        return f"Claimed task #{task_id} for {owner} via {source}"
+
+    def claim_first(self, owner: str, role: str = None, source: str = "auto") -> tuple[dict | None, str]:
+        for task in self.unclaimed(role):
+            result = self.claim(task["id"], owner, role, source)
+            if not result.startswith("Error:"):
+                return self._load(task["id"]), result
+        return None, "No claimable tasks."
+
+    def is_claimable(self, task: dict, role: str = None) -> bool:
+        return (
+            task.get("status") == "pending"
+            and not task.get("owner")
+            and not task.get("blockedBy")
+            and self._task_allows_role(task, role)
+        )
+
     def has_tasks(self) -> bool:
         return any(task.get("status") != "deleted" for task in self._all_tasks())
 
@@ -173,6 +219,17 @@ class TaskManager:
 
     def _assert_task_exists(self, task_id: int) -> None:
         self._load(task_id)
+
+    def _task_allows_role(self, task: dict, role: str = None) -> bool:
+        required_role = task.get("claim_role") or task.get("required_role") or ""
+        if not required_role:
+            return True
+        return bool(role) and role == required_role
+
+    def _append_claim_event(self, payload: dict) -> None:
+        self.dir.mkdir(parents=True, exist_ok=True)
+        with (self.dir / "claim_events.jsonl").open("a") as handle:
+            handle.write(json.dumps(payload, ensure_ascii=False) + "\n")
 
     def _clear_dependency(self, completed_id: int) -> None:
         for task in self._all_tasks():

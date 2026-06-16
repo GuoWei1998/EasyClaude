@@ -10,6 +10,7 @@ READ_ONLY_TOOLS = {
     "bash_readonly",
     "task_list",
     "task_get",
+    "task_unclaimed",
     "check_background",
     "cron_list",
     "list_teammates",
@@ -17,7 +18,7 @@ READ_ONLY_TOOLS = {
     "shutdown_response",
     "list_team_requests",
 }
-TASK_GRAPH_TOOLS = {"task_create", "task_update", "task_list", "task_get"}
+TASK_GRAPH_TOOLS = {"task_create", "task_update", "task_list", "task_get", "task_unclaimed", "task_claim"}
 WRITE_TOOLS = {
     "write_file",
     "edit_file",
@@ -31,6 +32,7 @@ WRITE_TOOLS = {
     "shutdown_teammate",
     "shutdown_request",
     "plan_approval",
+    "task_claim",
 }
 
 
@@ -82,6 +84,8 @@ DEFAULT_RULES = [
     {"tool": "task_update", "behavior": "allow"},
     {"tool": "task_list", "behavior": "allow"},
     {"tool": "task_get", "behavior": "allow"},
+    {"tool": "task_unclaimed", "behavior": "allow"},
+    {"tool": "task_claim", "behavior": "allow"},
 ]
 
 
